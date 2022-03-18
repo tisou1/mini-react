@@ -37,39 +37,129 @@ function createTextElement(text) {
 }
 
 /** render方法 */
-function render(element, container) {
-  // TODO
-  // 根据穿入的react element穿件真实的dom
-  // 特殊处理文本节点
-  const dom = element.type === 'TEXT_ELEMENT'
-    ? document.createTextNode('')
-    : document.createElement(element.type)
+function createDom(fiber) {
+  //把fiber上的属性移到真是dom上
+  const dom =
+    fiber.type == "TEXT_ELEMENT"
+      ? document.createTextNode("")
+      : document.createElement(fiber.type)
 
-  /** 从props中过滤掉children属性 */
-  const isProperty = key => key !== 'children'
-  // 将element的属性赋值到node节点中
-  Object.keys(element.props)
+  const isProperty = key => key !== "children"
+
+  Object.keys(fiber.props)
     .filter(isProperty)
-    .forEach((name) => {
-      dom[name] = element.props[name]
+    .forEach(name => {
+      dom[name] = fiber.props[name]
     })
 
-  // 递归的将子元素也添加倒容器中
-  element.props.children.forEach(child => render(child, dom))
-
-  // 添加到这个容器中
-  container.appendChild(dom)
+  return dom
 }
+
+
+function render(element, container) {
+  //将nextUnitOfworl设置为root fiber
+  nextUnitOfWork = {
+    dom: container,
+    props: {
+      children: [element]
+    }
+  }
+
+}
+
+
 
 let nextUnitOfWork = null
 
 /**workLoop */
 function workLoop(deadline) {
-    
+  let shouldYield = false
+  while(!shouldYield && nextUnitOfWork) {
+    nextUnitOfWork = performUnitOfWork(nextUnitOfWork)
+  }
+  shouldYield = deadline.timeRemaining() < 1
   requestIdleCallback(workLoop)
 }
 
+//当浏览器准备好的时候,就会调用wordLoop
 requestIdleCallback(workLoop)
+
+
+
+/**
+ * 不仅执行函数,而且返回一个工作单元
+ */
+function performUnitOfWork(fiber) {
+  /**
+   * 1. 添加dom节点
+   * 2. 创建新的fiber
+   * 3. 返回下一个工作单元
+   */
+  /**
+   * fiber结构有三个指向,分别是parent child(第一个孩子) 下一个sibling(兄弟)
+   * 1.当前fiber完成后,它的child是下一个工作单元
+   * 2.如果没有孩子,就去找他的sibling(兄弟节点)作为下一个工作单元
+   * 3.如果既没有child和sibling的话就去找"uncle"(叔叔)即sibling的parent
+   * 4.如果该fiber的parent没有sibling,就会通过parent直到找到一个有sibling的或者到root了也就意味着渲染工作完成了.
+   */
+  //1.
+  if(!fiber.dom) {
+    fiber.dom = createDom(fiber)
+  }
+  //使用fiber.dom跟踪DOM节点
+  if(fiber.parent) {
+    fiber.parent.dom.appendChild(fiber.dom)
+  }
+
+
+  //2.
+  const elements = fiber.props.children
+  let index = 0
+  let prevSibling = null
+
+  while(index < element.length) {
+    const element = elements[index]
+
+    const newFiber = {
+      type: element.type,
+      props: element.props,
+      parent: fiber,
+      dom: null
+    }
+
+   //添加到fiber树种
+    if(index === 0) {
+      fiber.child = newFiber
+    } else {
+      prevSibling.sibling = newFiber
+    }
+
+    prevSibling = newFiber
+    index++
+
+  }
+
+
+  //3.找到下一个工作单元
+  if(fiber.child) {
+    //首先找childr fiber
+    return fiber.child
+  }
+  let nextFiber = fiber
+  while(nextFiber) {
+    //再找csibling fiber
+    if(nextFiber.sibling) {
+      return nextFiber.sibling
+    }
+   // 最后再找parent fiber
+    nextFiber = nextFiber.parent
+  }
+
+
+
+}
+
+
 
 
 /** 自定义库的名字 */
