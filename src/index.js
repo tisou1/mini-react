@@ -123,7 +123,16 @@ function commitWork(fiber) {
     return 
   }
 
-  const domParent = fiber.parent.dom
+  // const domParent = fiber.parent.dom
+
+  //找到dom节点的父节点,沿着fiber树向上查找,知道找到具有dom节点的fiber
+  let domParentFiber = fiber.parent
+  while(!domParentFiber) {
+    domParentFiber = domParentFiber.parent
+  }
+  const domParent = domParentFiber.dom
+
+
   //处理更新的的effectTag
   if(
     fiber.effectTag === 'PLACEMENT' &&
@@ -140,11 +149,22 @@ function commitWork(fiber) {
 
   } else if(fiber.effectTag === 'DELETION') {
     //从dom中删除节点
-    domParent.removeChild(fiber.dom)
+    // domParent.removeChild(fiber.dom)
+    //删除的时候需要向下找到一个带有dom的子节点
+    commitDeletion(fiber, domParent)
   } 
 
   commitWork(fiber.child)
   commitWork(fiber.sibling)
+}
+
+
+function commitDeletion(fiber, domParent) {
+  if(fiber.dom) {
+    domParent.removeChild(fiber.dom)
+  } else {
+    commitDeletion(fiber.child, domParent)
+  }
 }
 
 
@@ -220,21 +240,15 @@ function performUnitOfWork(fiber) {
    * 3.如果既没有child和sibling的话就去找"uncle"(叔叔)即sibling的parent
    * 4.如果该fiber的parent没有sibling,就会通过parent直到找到一个有sibling的或者到root了也就意味着渲染工作完成了.
    */
-  //1.
-  if(!fiber.dom) {
-    fiber.dom = createDom(fiber)
+
+
+
+  const isFunctionComponent = fiber.type instanceof Function
+  if(isFunctionComponent) {
+    updateFunctionComponent(fiber)
+  } else {
+    updateHostComponent(fiber)
   }
-  //使用fiber.dom跟踪DOM节点
-  // if(fiber.parent) {
-  //   fiber.parent.dom.appendChild(fiber.dom)
-  // }
-
-
-
-  //2.
-  const elements = fiber.props.children
-
-  reconcileChildren(fiber, elements)
  
 
 
@@ -256,6 +270,29 @@ function performUnitOfWork(fiber) {
 
 
 }
+
+function updateFunctionComponent(fiber) {
+  //TODO
+  //这里的fiber.type就是 App函数<App/>组件,返回h1元素
+  const children = [fiber.typ(fiber.props)]
+  reconcileChildren(fiber, children)
+}
+
+
+function updateHostComponent(fiber) {
+    //1.
+  if(!fiber.dom) {
+    fiber.dom = createDom(fiber)
+  }
+  //使用fiber.dom跟踪DOM节点
+  // if(fiber.parent) {
+  //   fiber.parent.dom.appendChild(fiber.dom)
+  // }
+  const elements = fiber.props.children
+  reconcileChildren(fiber, elements)
+
+}
+
 
 /**调和旧的fiber和新的元素 */
 function reconcileChildren(wipFiber, elements) {
@@ -336,12 +373,10 @@ const Didact = {
 
 // 有下面的comment babel就会使用我们自己的createElement方法
 /** @jsx Didact.createElement */
-const element = (
-  <div id="foo" className='ccc'>
-    <a>bar</a>
-    <b></b>
-  </div>
-)
+function App(props) {
+  return <h1>hi {props.name}</h1>
+}
+
 const container = document.getElementById('root')
 
-Didact.render(element, container)
+Didact.render(<App name="foo"/>, container)
