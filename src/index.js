@@ -36,48 +36,165 @@ function createTextElement(text) {
   }
 }
 
-/** render方法 */
+
 function createDom(fiber) {
   //把fiber上的属性移到真是dom上
   const dom =
-    fiber.type == "TEXT_ELEMENT"
+    fiber.type === "TEXT_ELEMENT"
       ? document.createTextNode("")
       : document.createElement(fiber.type)
 
-  const isProperty = key => key !== "children"
 
   Object.keys(fiber.props)
     .filter(isProperty)
     .forEach(name => {
       dom[name] = fiber.props[name]
     })
-
   return dom
+}
+const isEvent = key => key.startsWith('on')//以on开头
+const isProperty = key => key !== "children" && !isEvent(key)
+const isNew = (prev, next) => key => prev[key] !== next[key]
+const isGone = (prev, next) => key => !(key in next)
+
+function updateDom(dom, prevProps, nextProps) {
+  //TODO
+  //溢出旧的事件监听
+  Object.keys(prevProps)
+    .filter(isEvent)
+    .filter(
+      key => !(key in nextProps) || isNew(prevProps, nextProps)
+    )
+    .forEach(name => {
+      const eventType = name
+        .toLowerCase()
+        .substring(2)
+
+        //从真实dom中移除事件监听
+        dom.removeEventListener(eventType, prevProps[name])
+    })
+
+  //删除旧的属性
+  Object.keys(prevProps)
+    .filter(isProperty)
+    .filter(isGone(prevProps, nextProps)) //新fiber中的属性不包含的旧属性(属性在旧的fiber不在新的fiber)
+    .forEach( name => {
+      dom[name] = ''
+    })
+
+
+  //设置改变后的属性
+  Object.keys(nextProps)
+    .filter(isProperty)
+    .filter(isNew(prevProps, nextProps))
+    .forEach(name => {
+      dom[name] = nextProps[name]
+    })
+
+
+  //添加新的事件监听
+  Object.keys(nextProps)
+    .filter(isEvent)
+    .filter(isNew(prevProps, nextProps))
+    .forEach(name => {
+      const eventType = name
+        .toLowerCase()
+        .substring(2)
+      
+      dom.addEventListener(eventType, nextProps[name])
+    })
 }
 
 
+function commitRoot() {
+  //提交到dom时,使用
+  deletions.forEach(commitWork)
+  //调用commitWork递归的将所有节点附加到dom上
+  commitWork(wipRoot.child)
+  //在将fiber都提交之后,要保存对最后一个fiber树的引用
+  currentRoot = wipRoot
+  wipRoot = null
+}
+
+
+function commitWork(fiber) {
+  if(!fiber){
+    return 
+  }
+
+  const domParent = fiber.parent.dom
+  //处理更新的的effectTag
+  if(
+    fiber.effectTag === 'PLACEMENT' &&
+    fiber.dom != null
+  ) {
+    //添加新的节点
+    domParent.appendChild(fiber.dom)
+  } else if(
+    fiber.effectTag === 'UPDATE' &&
+    fiber.dom != null
+  ) {
+    //更新dom  TODO
+    updateDom(fiber.dom, fiber.alternate.props, fiber.props)
+
+  } else if(fiber.effectTag === 'DELETION') {
+    //从dom中删除节点
+    domParent.removeChild(fiber.dom)
+  } 
+
+  commitWork(fiber.child)
+  commitWork(fiber.sibling)
+}
+
+
+
+
 function render(element, container) {
-  //将nextUnitOfworl设置为root fiber
-  nextUnitOfWork = {
+
+  wipRoot = {
     dom: container,
     props: {
       children: [element]
-    }
+    },
+    alternate: currentRoot,
   }
+  //准总要删除的节点
+  deletions = []
+  /**
+   * 在React中最多会同时存在两棵Fiber树。
+   * 当前屏幕上显示内容对应的Fiber树称为current Fiber树，
+   * 正在内存中构建的Fiber树称为workInProgress Fiber树。
+   */
+  //内存中可同时可同时存在两颗fiber树
+  //每次渲染初期,都要是使用alternate来获取当前在内存中的fiber树
+  //然后更新alternate(旧的fiber树),左后和currrentRoot进行比较
+
+  nextUnitOfWork = wipRoot
 
 }
 
 
 
 let nextUnitOfWork = null
+let wipRoot = null
+//保存当前的fiber树
+let currentRoot = null
+//准总要删除的节点
+let deletions = null
 
 /**workLoop */
 function workLoop(deadline) {
   let shouldYield = false
+  //调用render之后就会进行nextUnitOfWork的赋值,
   while(!shouldYield && nextUnitOfWork) {
     nextUnitOfWork = performUnitOfWork(nextUnitOfWork)
+    shouldYield = deadline.timeRemaining() < 1
   }
-  shouldYield = deadline.timeRemaining() < 1
+
+  //当没有下一个工作单元的时候,就会将整个fiber树提交给dom
+  if(!nextUnitOfWork && wipRoot){
+    commitRoot()
+  }
   requestIdleCallback(workLoop)
 }
 
@@ -107,37 +224,17 @@ function performUnitOfWork(fiber) {
     fiber.dom = createDom(fiber)
   }
   //使用fiber.dom跟踪DOM节点
-  if(fiber.parent) {
-    fiber.parent.dom.appendChild(fiber.dom)
-  }
+  // if(fiber.parent) {
+  //   fiber.parent.dom.appendChild(fiber.dom)
+  // }
+
 
 
   //2.
   const elements = fiber.props.children
-  let index = 0
-  let prevSibling = null
 
-  while(index < element.length) {
-    const element = elements[index]
-
-    const newFiber = {
-      type: element.type,
-      props: element.props,
-      parent: fiber,
-      dom: null
-    }
-
-   //添加到fiber树种
-    if(index === 0) {
-      fiber.child = newFiber
-    } else {
-      prevSibling.sibling = newFiber
-    }
-
-    prevSibling = newFiber
-    index++
-
-  }
+  reconcileChildren(fiber, elements)
+ 
 
 
   //3.找到下一个工作单元
@@ -157,6 +254,69 @@ function performUnitOfWork(fiber) {
 
 
 
+}
+
+/**调和旧的fiber和新的元素 */
+function reconcileChildren(wipFiber, elements) {
+  let index = 0
+  let oldFiber = wipRoot.alternate && wipRoot.alternate.child
+
+  //elements 使我们要渲染到Domd的东西.oldFiber是上次渲染的东西
+
+  let prevSibling = null
+
+  while(index < element.length || oldFiber != null) {
+    const element = elements[index]
+
+
+    let newFiber = null
+
+    //比较新旧的区别
+    //真实的react也是用了key进行优化
+    const sameType = oldFiber && element && element.type === oldFiber.type
+    
+    if(sameType) {
+      //TODO 更新这个node
+      //保留旧的fiber的dom节点和元素props
+
+      newFiber = {
+        type: oldFiber.type,
+        props: element.props,
+        dom: oldFiber.dom,
+        parent: wipFiber,
+        alternate: oldFiber,
+        effectTag: "UPDATE"
+      }
+    }
+
+    if(element && !sameType){
+      //添加这个node
+      newFiber = {
+        type: element.type,
+        props: element.props,
+        dom: null,
+        parent: wipFiber,
+        alternate: null,
+        effectTag: "PLACEMENT"
+      }
+    }
+
+    if(oldFiber && !sameType) {
+      // TODO 删除oldFiber's node
+      oldFiber.effectTag = 'DELETION'
+      deletions.push(oldFiber)
+    }
+   //添加到fiber树中
+    if(index === 0) {
+      fiber.child = newFiber
+    } else {
+      prevSibling.sibling = newFiber
+    }
+
+    prevSibling = newFiber
+    index++
+
+  }
 }
 
 
