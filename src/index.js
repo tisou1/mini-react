@@ -224,6 +224,8 @@ requestIdleCallback(workLoop)
 
 
 
+
+
 /**
  * 不仅执行函数,而且返回一个工作单元
  */
@@ -271,13 +273,51 @@ function performUnitOfWork(fiber) {
 
 }
 
+
+let wipFiber = null
+let hookIndex = null
+
 function updateFunctionComponent(fiber) {
+  wipFiber = fiber
+  hookIndex = 0
+  wipFiber.hooks = []
   //TODO
   //这里的fiber.type就是 App函数<App/>组件,返回h1元素
-  const children = [fiber.typ(fiber.props)]
+  const children = [fiber.type(fiber.props)]
   reconcileChildren(fiber, children)
 }
+function useState(initial) {
+  
+  const oldHook = 
+    wipFiber.alternate &&
+    wipFiber.alternate.hooks &&
+    wipFiber.alternate.hooks[hookIndex]
+  
+    const hook = {
+      state: oldHook ? oldHook.state : initial,
+      queue: [],
+    }
+    //在下一次渲染组件之前执行actions
+    const actions = oldHook ? oldHook.queue : []
+    actions.forEach(action => {
+      hook.state = action(hook.state)
+    })
 
+    const setState = action => {
+      hook.queue.push(action)
+      wipRoot = {
+        dom: currentRoot.dom,
+        props: currentRoot.props,
+        alternate: currentRoot
+      }
+      nextUnitOfWork = wipRoot
+      deletions = []
+    }
+
+    wipFiber.hooks.push(hook)
+    hookIndex++
+    return [hook.state, setState]
+}
 
 function updateHostComponent(fiber) {
     //1.
@@ -303,7 +343,7 @@ function reconcileChildren(wipFiber, elements) {
 
   let prevSibling = null
 
-  while(index < element.length || oldFiber != null) {
+  while(index < elements.length || oldFiber != null) {
     const element = elements[index]
 
 
@@ -369,12 +409,18 @@ function reconcileChildren(wipFiber, elements) {
 const Didact = {
   createElement,
   render,
+  useState
 }
 
 // 有下面的comment babel就会使用我们自己的createElement方法
 /** @jsx Didact.createElement */
 function App(props) {
-  return <h1>hi {props.name}</h1>
+  const [state, setState] = Didact.useState(1)
+  return(
+    <h1
+      onClick={() => setState(c => c+1)}
+    >hi {props.name} {state}</h1>
+  )
 }
 
 const container = document.getElementById('root')
