@@ -122,17 +122,15 @@ function commitWork(fiber) {
   if(!fiber){
     return 
   }
-
   // const domParent = fiber.parent.dom
 
   //找到dom节点的父节点,沿着fiber树向上查找,知道找到具有dom节点的fiber
   let domParentFiber = fiber.parent
-  while(!domParentFiber) {
+  while(!domParentFiber.dom) {
     domParentFiber = domParentFiber.parent
   }
   const domParent = domParentFiber.dom
-
-
+  console.log(domParent);
   //处理更新的的effectTag
   if(
     fiber.effectTag === 'PLACEMENT' &&
@@ -207,7 +205,7 @@ let deletions = null
 function workLoop(deadline) {
   let shouldYield = false
   //调用render之后就会进行nextUnitOfWork的赋值,
-  while(!shouldYield && nextUnitOfWork) {
+  while(nextUnitOfWork && !shouldYield) {
     nextUnitOfWork = performUnitOfWork(nextUnitOfWork)
     shouldYield = deadline.timeRemaining() < 1
   }
@@ -337,7 +335,7 @@ function updateHostComponent(fiber) {
 /**调和旧的fiber和新的元素 */
 function reconcileChildren(wipFiber, elements) {
   let index = 0
-  let oldFiber = wipRoot.alternate && wipRoot.alternate.child
+  let oldFiber = wipFiber.alternate && wipFiber.alternate.child
 
   //elements 使我们要渲染到Domd的东西.oldFiber是上次渲染的东西
 
@@ -392,7 +390,7 @@ function reconcileChildren(wipFiber, elements) {
    //添加到fiber树中
     if(index === 0) {
       wipFiber.child = newFiber
-    } else {
+    } else if(element){
       prevSibling.sibling = newFiber
     }
 
@@ -414,15 +412,17 @@ const Didact = {
 
 // 有下面的comment babel就会使用我们自己的createElement方法
 /** @jsx Didact.createElement */
-function App(props) {
-  const [state, setState] = Didact.useState(1)
-  return(
-    <h1
-      onClick={() => setState(c => c+1)}
-    >hi {props.name} {state}</h1>
-  )
+function Counter() {
+  const [state, setState] = Didact.useState(1);
+  return (
+    <h1 onClick={() => setState(c => c + 1)} style="user-select: none">
+      Count: {state}
+    </h1>
+  );
 }
+const element = <Counter />;
+// const element = <div>2222</div>
 
 const container = document.getElementById('root')
 
-Didact.render(<App name="foo"/>, container)
+Didact.render(element, container)
