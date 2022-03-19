@@ -45,11 +45,12 @@ function createDom(fiber) {
       : document.createElement(fiber.type)
 
 
-  Object.keys(fiber.props)
-    .filter(isProperty)
-    .forEach(name => {
-      dom[name] = fiber.props[name]
-    })
+    updateDom(dom, {} , fiber.props)
+  // Object.keys(fiber.props)
+  //   .filter(isProperty)
+  //   .forEach(name => {
+  //     dom[name] = fiber.props[name]
+  //   })
   return dom
 }
 const isEvent = key => key.startsWith('on')//以on开头
@@ -63,7 +64,7 @@ function updateDom(dom, prevProps, nextProps) {
   Object.keys(prevProps)
     .filter(isEvent)
     .filter(
-      key => !(key in nextProps) || isNew(prevProps, nextProps)
+      key => !(key in nextProps) || isNew(prevProps, nextProps)(key)
     )
     .forEach(name => {
       const eventType = name
@@ -306,9 +307,14 @@ function reconcileChildren(wipFiber, elements) {
       oldFiber.effectTag = 'DELETION'
       deletions.push(oldFiber)
     }
+
+    if(oldFiber) {
+      oldFiber = oldFiber.sibling
+    }
+
    //添加到fiber树中
     if(index === 0) {
-      fiber.child = newFiber
+      wipFiber.child = newFiber
     } else {
       prevSibling.sibling = newFiber
     }
