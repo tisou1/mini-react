@@ -259,7 +259,7 @@ function performUnitOfWork(fiber) {
   }
   let nextFiber = fiber
   while(nextFiber) {
-    //再找csibling fiber
+    //再找sibling fiber
     if(nextFiber.sibling) {
       return nextFiber.sibling
     }
