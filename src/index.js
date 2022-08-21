@@ -38,7 +38,7 @@ function createTextElement(text) {
 
 
 function createDom(fiber) {
-  //把fiber上的属性移到真是dom上
+  //把fiber上的属性移到真实dom上
   const dom =
     fiber.type === "TEXT_ELEMENT"
       ? document.createTextNode("")
@@ -60,7 +60,7 @@ const isGone = (prev, next) => key => !(key in next)
 
 function updateDom(dom, prevProps, nextProps) {
   //TODO
-  //溢出旧的事件监听
+  //移除旧的事件监听
   Object.keys(prevProps)
     .filter(isEvent)
     .filter(
