@@ -124,7 +124,7 @@ function commitWork(fiber) {
   }
   // const domParent = fiber.parent.dom
 
-  //找到dom节点的父节点,沿着fiber树向上查找,知道找到具有dom节点的fiber
+  //找到dom节点的父节点,沿着fiber树向上查找,直到找到具有dom节点的fiber
   let domParentFiber = fiber.parent
   while(!domParentFiber.dom) {
     domParentFiber = domParentFiber.parent
@@ -186,7 +186,7 @@ function render(element, container) {
    */
   //内存中可同时可同时存在两颗fiber树
   //每次渲染初期,都要是使用alternate来获取当前在内存中的fiber树
-  //然后更新alternate(旧的fiber树),左后和currrentRoot进行比较
+  //然后更新alternate(旧的fiber树),只后和currrentRoot进行比较
 
   nextUnitOfWork = wipRoot
 
